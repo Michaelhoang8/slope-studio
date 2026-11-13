@@ -3,30 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Slope Studio · Gradients and optimization</title>
+    <title>Slope Studio</title>
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="app.js"></script>
   </head>
   <body>
-    <header>
-      <a href="/">slope<span>studio</span><i aria-hidden="true">∂</i></a
-      ><span>Automatic differentiation / optimization</span
-      ><button id="open">Open experiment</button
-      ><input id="file" type="file" accept=".json" hidden />
+    <header class="masthead">
+      <a href="#">Slope Studio</a
+      ><a href="#workspace">Open graph <span aria-hidden="true">↘</span></a>
     </header>
-    <main>
-      <section class="intro">
-        <p class="eyebrow">A closer look at the way down.</p>
-        <h1>Follow the gradient.<br /><em>Question the destination.</em></h1>
-        <p>
-          Trace every derivative. Compare three optimizers on the same
-          landscape, with the same starting point.
-        </p>
+    <section class="title-page">
+      <h1>Slope<br />Studio<span class="title-dot">.</span></h1>
+      <div class="title-bottom">
+        <span>Gradient descent / Momentum / Adam</span
+        ><a href="#workspace" aria-label="Scroll to graph">↓</a>
+      </div>
+    </section>
+    <main id="workspace">
+      <div class="workspace-top">
+        <div>
+          <span class="app-name">Slope Studio</span
+          ><span id="formula-display"></span>
+        </div>
+        <div class="toolbar">
+          <button id="analysis-open">Analysis</button
+          ><button id="settings-open" aria-haspopup="dialog">
+            Parameters <span aria-hidden="true">☷</span>
+          </button>
+        </div>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+      <section id="result" hidden>
+        <div class="graph-stage">
+          <canvas
+            id="landscape"
+            width="1440"
+            height="1040"
+            tabindex="0"
+            role="img"
+            aria-label="Loss landscape. Click to choose a starting point; arrows adjust it and Enter runs."
+          ></canvas>
+          <div id="legend" class="legend"></div>
+          <span class="graph-instruction">Click to set start</span>
+        </div>
+        <div class="transport">
+          <button id="play">Play</button
+          ><label class="method-label"
+            ><span class="sr-only">Optimizer</span
+            ><select id="method">
+              <option value="gradient">Gradient descent</option>
+              <option value="momentum">Momentum</option>
+              <option value="adam">Adam</option>
+            </select></label
+          ><label class="scrubber"
+            ><span class="sr-only">Iteration</span
+            ><input id="step" type="range" min="0" value="0" /></label
+          ><span id="iteration"></span>
+        </div>
+        <div id="point" class="point"></div>
       </section>
+    </main>
+    <dialog id="settings-panel" aria-labelledby="settings-title">
+      <div class="panel-heading">
+        <h2 id="settings-title">Parameters</h2>
+        <button data-close="settings-panel" aria-label="Close parameters">
+          ×
+        </button>
+      </div>
       <form id="form">
         <div class="formula-row">
           <label
-            >Landscape<select id="preset">
+            >Function<select id="preset">
               <option value="valley">Rosenbrock valley</option>
               <option value="bowl">Anisotropic bowl</option>
               <option value="ripples">Rippled surface</option>
@@ -73,7 +120,7 @@
               min="1"
               max="2000"
               required /></label
-          ><button id="run" class="primary">Trace the descent ↗</button>
+          ><button id="run" class="primary">Run</button>
         </div>
         <details>
           <summary>Numerics &amp; plot bounds</summary>
@@ -126,99 +173,13 @@
           </div>
         </details>
       </form>
-      <p id="status" role="status" aria-live="polite"></p>
-      <section id="result" hidden>
-        <div class="charts">
-          <div>
-            <div class="section-heading">
-              <h2>A landscape, three paths.</h2>
-              <button id="png">Save plot PNG</button>
-            </div>
-            <canvas
-              id="landscape"
-              width="720"
-              height="520"
-              tabindex="0"
-              role="img"
-              aria-label="Loss landscape and optimizer paths. Click to choose a starting point. Arrow keys adjust the starting point; Enter runs."
-            ></canvas>
-            <p id="surface-note" class="hint"></p>
-            <p class="hint">
-              Click the landscape to set a new start and run. With keyboard
-              focus, arrows move the start by 1% of the plot span; Enter runs.
-              The plot clips trajectories outside its stated bounds.
-            </p>
-          </div>
-          <div>
-            <h2>The loss along the way.</h2>
-            <svg
-              id="loss"
-              viewBox="0 0 520 350"
-              role="img"
-              aria-label="Optimizer loss histories"
-            ></svg>
-            <div id="legend" class="legend"></div>
-            <p class="hint">
-              Vertical scale: sign(f) × log(1 + |f|). Each optimizer uses the
-              same learning rate; this is an experiment, not a tuned performance
-              ranking.
-            </p>
-            <div id="comparison" class="scroll"></div>
-          </div>
-        </div>
-        <section class="inspect">
-          <div class="section-heading">
-            <h2>Pause at a point.</h2>
-            <label
-              >Optimizer<select id="method">
-                <option value="gradient">Gradient descent</option>
-                <option value="momentum">Momentum</option>
-                <option value="adam">Adam</option>
-              </select></label
-            >
-          </div>
-          <div class="playback">
-            <button id="play">Play trace</button
-            ><label
-              >Iteration<input
-                id="step"
-                type="range"
-                min="0"
-                value="0" /></label
-            ><span id="iteration"></span>
-          </div>
-          <div id="point" class="point"></div>
-          <p class="hint">
-            Gradient tolerance is a stationarity check. It does not prove a
-            minimum, global optimality, or successful convergence.
-          </p>
-          <details>
-            <summary>Numerical gradient cross-check</summary>
-            <div id="checks" class="scroll"></div>
-            <p class="hint">
-              Central differences use h = 10⁻⁵ × max(1, |coordinate|). Agreement
-              is diagnostic; cancellation and invalid neighboring points can
-              limit it.
-            </p>
-          </details>
-          <details>
-            <summary>Follow the reverse pass</summary>
-            <p class="hint">
-              Forward values flow through the tape; the output adjoint starts at
-              one. Each reverse edge adds upstream adjoint × local derivative to
-              its input. Shared x/y nodes accumulate every contribution.
-            </p>
-            <div id="tape" class="scroll"></div>
-          </details>
-        </section>
-        <div class="exports">
-          <button id="save">Save experiment</button
-          ><button id="export">Export evidence JSON</button
-          ><button id="csv">Export all trace CSV</button>
-        </div>
-      </section>
+      <div class="file-actions">
+        <button id="open">Open experiment</button
+        ><button id="save">Save experiment</button
+        ><input id="file" type="file" accept=".json" hidden />
+      </div>
       <details>
-        <summary>Expression guide &amp; model boundaries</summary>
+        <summary>Syntax and numerical methods</summary>
         <p>
           Use x, y, numbers, + − * /, parentheses, integer powers ^0 through ^8,
           and sin, cos, exp, log, sqrt. Unary minus follows conventional power
@@ -240,12 +201,60 @@
           evaluation because its local derivative is not finite.
         </p>
       </details>
-      <footer>
-        <span>Local math / inspectable evidence</span
-        ><span
-          >Two variables. Real derivatives. Honest stopping conditions.</span
-        >
-      </footer>
-    </main>
+    </dialog>
+    <dialog id="analysis-panel" aria-labelledby="analysis-title">
+      <div class="panel-heading">
+        <h2 id="analysis-title">Analysis</h2>
+        <button data-close="analysis-panel" aria-label="Close analysis">
+          ×
+        </button>
+      </div>
+      <h3>Loss by iteration</h3>
+      <svg
+        id="loss"
+        viewBox="0 0 520 350"
+        role="img"
+        aria-label="Optimizer loss histories"
+      ></svg>
+      <p class="hint">
+        Scale: sign(f) × log(1 + |f|). Shared learning rate across methods.
+      </p>
+      <div id="comparison" class="scroll"></div>
+      <h3>Selected point</h3>
+      <p class="hint">
+        Gradient tolerance checks stationarity, not whether the point is a
+        minimum.
+      </p>
+      <details>
+        <summary>Numerical gradient cross-check</summary>
+        <div id="checks" class="scroll"></div>
+        <p class="hint">
+          Central differences use h = 10⁻⁵ × max(1, |coordinate|). Agreement is
+          diagnostic; cancellation and invalid neighboring points can limit it.
+        </p>
+      </details>
+      <details>
+        <summary>Derivative tape</summary>
+        <p class="hint">
+          Forward values flow through the tape; the output adjoint starts at
+          one. Each reverse edge adds upstream adjoint × local derivative to its
+          input. Shared x/y nodes accumulate every contribution.
+        </p>
+        <div id="tape" class="scroll"></div>
+      </details>
+      <details>
+        <summary>Plot details</summary>
+        <p id="surface-note" class="hint"></p>
+        <p class="hint">
+          Arrow keys move the starting point by 1% of the plot span; Enter runs.
+          Trajectories outside the bounds are clipped.
+        </p>
+      </details>
+      <div class="file-actions">
+        <button id="png">Save plot PNG</button
+        ><button id="export">Evidence JSON</button
+        ><button id="csv">Trace CSV</button>
+      </div>
+    </dialog>
   </body>
 </html>

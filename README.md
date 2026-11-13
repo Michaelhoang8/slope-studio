@@ -16,11 +16,11 @@ Open http://127.0.0.1:8000. The loopback server exposes only five static assets.
 
 ## Explore
 
-Choose Rosenbrock's valley, an anisotropic quadratic, a rippled nonconvex surface, or a stationary saddle. Edit the expression, starting coordinates, shared learning rate, and step budget. Optional controls set gradient norm clipping, gradient tolerance, and plot bounds.
+Scroll from the title to the full-screen graph. Open **Parameters** to choose Rosenbrock's valley, an anisotropic quadratic, a rippled nonconvex surface, or a stationary saddle. Edit the expression, starting coordinates, shared learning rate, and step budget. Optional controls set gradient norm clipping, gradient tolerance, and plot bounds.
 
 Run all three optimizers, select one, and scrub or play its trace. At each valid point, inspect the loss, raw gradient, finite-difference diagnostic, and every forward value/local derivative/adjoint in the tape. Click the landscape to start another experiment; keyboard arrows adjust the start by 1% of the displayed span and Enter runs it.
 
-Save settings, export complete evidence JSON or all optimizer traces as CSV, and save the landscape plot as PNG. [Example settings](docs/example.json) and [example landscape](docs/example-landscape.png) are included.
+Use **Analysis** for the loss-history chart, comparison table, derivative tape, and exports. Save experiment settings from **Parameters**. Export complete evidence JSON or all optimizer traces as CSV, and save the landscape plot as PNG. [Example settings](docs/example.json) and [example landscape](docs/example-landscape.png) are included.
 
 The default Rosenbrock study starts at (-1.2, 1), uses a learning rate of 0.002, and runs 1,000 updates without clipping. Final losses are approximately 0.07069474 for gradient descent, 1.7678e-8 for momentum, and 3.99461913 for Adam. All three hit the step budget. This shared-rate comparison is not a tuned benchmark or a universal ranking of optimizers.
 
@@ -48,7 +48,7 @@ References: [Stanford's backpropagation example](https://cs231n.stanford.edu/sli
 
 ## Plots and numerical boundaries
 
-The landscape uses 64×64 cell-center loss samples. Colors scale by `log(1 + value - sampled_minimum)`; this is not an exact contour reconstruction or a computed global minimum. Undefined cells are gray. Paths use actual trace coordinates and clip at the selected plot bounds; out-of-view point counts are reported. The loss-history vertical axis uses `sign(f)*log(1+abs(f))`, allowing negative losses without silently dropping them.
+The landscape uses 64×64 cell-center loss samples. Colors and interpolated contour lines scale by `log(1 + value - sampled_minimum)`; this is not an exact contour reconstruction or a computed global minimum. Undefined cells are gray. Paths use actual trace coordinates and clip at the selected plot bounds; out-of-view point counts are reported. The loss-history vertical axis uses `sign(f)*log(1+abs(f))`, allowing negative losses without silently dropping them.
 
 Expressions: at most 1,000 characters, 300 tokens, 100 tape nodes, and 32 parser nesting levels. Constant magnitude is at most 1e6. Starting coordinates and plot bounds stay within ±100; each plot axis spans at least 0.01. Rate 1e-6–1; budget 1–2,000 integer updates; clip 0–10,000 (zero disables); tolerance 1e-12–1. Imported settings are limited to 50 KB and validated before populating controls.
 
@@ -66,6 +66,6 @@ python -m unittest discover -s tests -v
 
 Twelve JavaScript tests and one HTTP-boundary test cover shared-variable accumulation, precedence, function derivatives, 300 symbolic Rosenbrock gradient checks, 200 independently differentiated composed-expression checks, finite-difference boundary failures, exact quadratic descent recurrence, momentum/Adam updates, clipping, stationary saddles, numerical/domain stops, sampling, bounds, and reproducibility. CI runs Node 22/24 on Linux and Node 24 on Windows.
 
-Browser validation exercised playback, optimizer/iteration selection, numerical checks and tape inspection, the stationary saddle, keyboard/pointer starting points, domain-error feedback, all exports, and saved-setting import. A separate Python analytic-gradient replay reproduced all 3,003 default trace points and CSV values; the PNG export was verified as 720×520 pixels.
+Browser validation exercised playback, optimizer/iteration selection, numerical checks and tape inspection, the stationary saddle, keyboard/pointer starting points, domain-error feedback, all exports, and saved-setting import. A separate Python analytic-gradient replay reproduced all 3,003 default trace points and CSV values; the original PNG export was verified as 720×520 pixels. The redesigned canvas now exports at its current viewport size and device pixel ratio (capped at 2), with responsive contour rendering. The redesign was checked at desktop and 390-pixel mobile widths, including drawer focus/Escape, parameter submission, iteration selection, and stable graph position while recomputing.
 
 `core.js` owns compilation, differentiation, optimizers, and sampling; `worker.js` isolates numerical work; `app.js` renders safe text, canvas/SVG plots, and inspectable evidence. `run.py` is a small allowlisted loopback server with a restrictive content-security policy.

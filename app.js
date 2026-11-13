@@ -1,7 +1,13 @@
-import { example, presets, evaluate, numericalCheck, validate } from "./core.js";
+import {
+  example,
+  presets,
+  evaluate,
+  numericalCheck,
+  validate,
+} from "./core.js";
 const $ = (id) => document.getElementById(id),
   names = { gradient: "Gradient descent", momentum: "Momentum", adam: "Adam" },
-  colors = { gradient: "#326e78", momentum: "#b47542", adam: "#79558e" };
+  colors = { gradient: "#a1e7cf", momentum: "#ffb780", adam: "#ded0ff" };
 let result = null,
   worker = null,
   timer = null,
@@ -48,15 +54,16 @@ function settings() {
 function stop() {
   clearInterval(timer);
   timer = null;
-  $("play").textContent = "Play trace";
+  $("play").textContent = "Play";
 }
 function run() {
   stop();
   worker?.terminate();
-  $("result").hidden = true;
+  $("result").setAttribute("aria-busy", "true");
+  for (const id of ["save", "export", "csv", "png", "play", "method", "step"])
+    $(id).disabled = true;
   $("run").disabled = true;
-  $("status").textContent =
-    "Tracing gradients, optimizers, and the sampled surface…";
+  $("status").textContent = "Computing…";
   worker = new Worker("./worker.js", { type: "module" });
   worker.onmessage = ({ data }) => {
     worker.terminate();
@@ -77,18 +84,25 @@ function run() {
       "The numerical worker could not finish. Reload and retry.";
   };
   const input = settings();
-  $("preset").value = Object.keys(presets).find(key =>
-    Object.entries(presets[key]).every(([field, value]) =>
-      JSON.stringify(input[field]) === JSON.stringify(value))) || "custom";
+  $("preset").value =
+    Object.keys(presets).find((key) =>
+      Object.entries(presets[key]).every(
+        ([field, value]) =>
+          JSON.stringify(input[field]) === JSON.stringify(value),
+      ),
+    ) || "custom";
   worker.postMessage(input);
 }
 function selected() {
   return result.runs.find((r) => r.method === $("method").value);
 }
 function render() {
+  $("formula-display").textContent = result.input.formula;
   $("result").hidden = false;
-  $("status").textContent =
-    `Compiled ${result.compiled.nodes.length} tape nodes. All three methods use the same start, learning rate, and clipping setting.`;
+  $("result").setAttribute("aria-busy", "false");
+  for (const id of ["save", "export", "csv", "png", "play", "method", "step"])
+    $(id).disabled = false;
+  $("status").textContent = "";
   $("legend").replaceChildren(
     ...result.runs.map((r) => {
       const span = el("span"),
@@ -213,43 +227,117 @@ function renderPoint() {
   drawLandscape();
   drawLoss();
 }
+function graphBox() {
+  const rect = $("landscape").getBoundingClientRect();
+  return {
+    width: rect.width,
+    height: rect.height,
+    x: rect.width < 700 ? 48 : 80,
+    y: 60,
+    w: rect.width - (rect.width < 700 ? 75 : 140),
+    h: rect.height - 110,
+  };
+}
 function drawLandscape() {
+  if (!result || !inspected) return;
   const canvas = $("landscape"),
     ctx = canvas.getContext("2d"),
-    { bounds } = result.input,
-    [xmin, xmax, ymin, ymax] = bounds,
-    grid = result.surface,
-    box = { x: 55, y: 25, w: 640, h: 440 };
+    box = graphBox();
+  if (box.w <= 0 || box.h <= 0) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.round(box.width * dpr);
+  canvas.height = Math.round(box.height * dpr);
+  ctx.scale(dpr, dpr);
+  const [xmin, xmax, ymin, ymax] = result.input.bounds,
+    grid = result.surface;
   const px = (x) => box.x + ((x - xmin) / (xmax - xmin)) * box.w,
     py = (y) => box.y + ((ymax - y) / (ymax - ymin)) * box.h;
-  ctx.clearRect(0, 0, 720, 520);
-  ctx.fillStyle = "#f4eff1";
-  ctx.fillRect(0, 0, 720, 520);
-  const denominator =
-    grid.min === null ? 1 : Math.log1p(grid.max - grid.min) || 1;
-  for (let row = 0; row < grid.size; row++)
-    for (let col = 0; col < grid.size; col++) {
-      const value = grid.values[row * grid.size + col];
-      if (value === null) ctx.fillStyle = "#c7c3c8";
-      else {
-        const t = Math.log1p(Math.max(0, value - grid.min)) / denominator;
-        ctx.fillStyle = `rgb(${Math.round(246 - 171 * t)},${Math.round(236 - 179 * t)},${Math.round(218 - 127 * t)})`;
-      }
-      ctx.fillRect(
-        box.x + (col / grid.size) * box.w,
-        box.y + (row / grid.size) * box.h,
-        box.w / grid.size + 0.5,
-        box.h / grid.size + 0.5,
-      );
-    }
+  ctx.fillStyle = "#17131e";
+  ctx.fillRect(0, 0, box.width, box.height);
+  const den = grid.min === null ? 1 : Math.log1p(grid.max - grid.min) || 1;
+  const tone = (v) =>
+    v === null ? null : Math.log1p(Math.max(0, v - grid.min)) / den;
+  const off = document.createElement("canvas");
+  off.width = off.height = grid.size;
+  const oc = off.getContext("2d"),
+    pixels = oc.createImageData(grid.size, grid.size);
+  grid.values.forEach((v, i) => {
+    const t = tone(v),
+      c = t === null ? [78, 76, 82] : [35 + 80 * t, 28 + 47 * t, 47 + 103 * t];
+    pixels.data.set([...c.map(Math.round), 255], i * 4);
+  });
+  oc.putImageData(pixels, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(off, box.x, box.y, box.w, box.h);
   ctx.save();
   ctx.beginPath();
   ctx.rect(box.x, box.y, box.w, box.h);
   ctx.clip();
+  // Iso-loss lines from the sampled surface, interpolated within each grid cell.
+  ctx.strokeStyle = "#d2b7ee";
+  ctx.globalAlpha = 0.19;
+  ctx.lineWidth = 0.7;
+  for (let level = 0.08; level < 1; level += 0.075) {
+    ctx.beginPath();
+    for (let row = 0; row < grid.size - 1; row++)
+      for (let col = 0; col < grid.size - 1; col++) {
+        const ids = [
+          row * grid.size + col,
+          row * grid.size + col + 1,
+          (row + 1) * grid.size + col + 1,
+          (row + 1) * grid.size + col,
+        ];
+        const vals = ids.map((i) => tone(grid.values[i]));
+        if (vals.some((v) => v === null)) continue;
+        const corners = [
+            [col + 0.5, row + 0.5],
+            [col + 1.5, row + 0.5],
+            [col + 1.5, row + 1.5],
+            [col + 0.5, row + 1.5],
+          ],
+          hits = [];
+        for (let edge = 0; edge < 4; edge++) {
+          const next = (edge + 1) % 4,
+            a = vals[edge],
+            b = vals[next];
+          if (a < level !== b < level) {
+            const t = (level - a) / (b - a);
+            hits.push([
+              box.x +
+                ((corners[edge][0] +
+                  t * (corners[next][0] - corners[edge][0])) /
+                  grid.size) *
+                  box.w,
+              box.y +
+                ((corners[edge][1] +
+                  t * (corners[next][1] - corners[edge][1])) /
+                  grid.size) *
+                  box.h,
+            ]);
+          }
+        }
+        for (let j = 0; j + 1 < hits.length; j += 2) {
+          ctx.moveTo(...hits[j]);
+          ctx.lineTo(...hits[j + 1]);
+        }
+      }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(box.x + (i / 4) * box.w, box.y);
+    ctx.lineTo(box.x + (i / 4) * box.w, box.y + box.h);
+    ctx.moveTo(box.x, box.y + (i / 4) * box.h);
+    ctx.lineTo(box.x + box.w, box.y + (i / 4) * box.h);
+    ctx.stroke();
+  }
   for (const r of result.runs) {
     ctx.strokeStyle = colors[r.method];
-    ctx.lineWidth = r.method === $("method").value ? 2.7 : 1.5;
-    ctx.globalAlpha = r.method === $("method").value ? 1 : 0.7;
+    ctx.lineWidth = r.method === $("method").value ? 2.4 : 1.5;
+    ctx.globalAlpha = r.method === $("method").value ? 1 : 0.65;
     ctx.beginPath();
     r.trace.forEach((p, i) =>
       i ? ctx.lineTo(px(p.x), py(p.y)) : ctx.moveTo(px(p.x), py(p.y)),
@@ -257,42 +345,42 @@ function drawLandscape() {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  ctx.beginPath();
-  ctx.arc(px(inspected.x), py(inspected.y), 6, 0, 2 * Math.PI);
   ctx.fillStyle = colors[$("method").value];
+  ctx.beginPath();
+  ctx.arc(px(inspected.x), py(inspected.y), 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(px(result.input.x), py(result.input.y), 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#fff";
+  ctx.fill();
   ctx.restore();
-  ctx.fillStyle = "#8f7b8b";
-  ctx.font = "11px Arial";
+  ctx.fillStyle = "#b2a3c1";
+  ctx.font = "11px Consolas, monospace";
   ctx.textAlign = "center";
-  for (let i = 0; i <= 4; i++) {
-    const x = xmin + (i / 4) * (xmax - xmin);
-    ctx.fillText(fmt(x), px(x), 485);
-  }
+  for (let i = 0; i <= 4; i++)
+    ctx.fillText(
+      fmt(xmin + (i / 4) * (xmax - xmin)),
+      box.x + (i / 4) * box.w,
+      box.y + box.h + 24,
+    );
   ctx.textAlign = "right";
-  for (let i = 0; i <= 4; i++) {
-    const y = ymin + (i / 4) * (ymax - ymin);
-    ctx.fillText(fmt(y), 47, py(y) + 4);
-  }
-  ctx.textAlign = "left";
-  let lx = 70;
-  for (const m of ["gradient", "momentum", "adam"]) {
-    ctx.fillStyle = colors[m];
-    ctx.fillRect(lx, 505, 17, 3);
-    ctx.fillText(names[m], lx + 24, 510);
-    lx += 210;
-  }
+  for (let i = 0; i <= 4; i++)
+    ctx.fillText(
+      fmt(ymin + (i / 4) * (ymax - ymin)),
+      box.x - 14,
+      py(ymin + (i / 4) * (ymax - ymin)) + 4,
+    );
   const outside = selected().trace.filter(
     (p) => p.x < xmin || p.x > xmax || p.y < ymin || p.y > ymax,
   ).length;
   $("surface-note").textContent =
-    `Sampled loss ${fmt(grid.min)} to ${fmt(grid.max)} · ${grid.invalid} undefined cells · ${outside} selected-trace points outside the plot. Color uses log(1 + f − sampled minimum).`;
+    `Sampled loss ${fmt(grid.min)} to ${fmt(grid.max)} · ${grid.invalid} undefined cells · ${outside} selected-trace points outside the plot. Colors and contours use log(1 + f − sampled minimum).`;
   canvas.setAttribute(
     "aria-label",
-    `Loss landscape x ${xmin} to ${xmax}, y ${ymin} to ${ymax}. ${names[$("method").value]} inspected at x ${fmt(inspected.x)}, y ${fmt(inspected.y)}, loss ${fmt(inspected.value)}. Click to choose a starting point; arrows adjust start; Enter runs.`,
+    `Loss landscape x ${xmin} to ${xmax}, y ${ymin} to ${ymax}. ${names[$("method").value]} at x ${fmt(inspected.x)}, y ${fmt(inspected.y)}, loss ${fmt(inspected.value)}. Click to choose a starting point; arrows adjust start; Enter runs.`,
   );
 }
 function drawLoss() {
@@ -318,7 +406,7 @@ function drawLoss() {
         y1: y,
         x2: 500,
         y2: y,
-        stroke: "#ded3dc",
+        stroke: "#403648",
         "stroke-width": 1,
       }),
       svg("text", { x: 52, y: y + 3, "text-anchor": "end" }, fmt(value)),
@@ -393,18 +481,19 @@ $("play").addEventListener("click", () => {
   }, 90);
 });
 $("landscape").addEventListener("click", (event) => {
-  if (!result) return;
+  if (!result || worker) return;
   const rect = $("landscape").getBoundingClientRect(),
-    x = ((event.clientX - rect.left) / rect.width) * 720,
-    y = ((event.clientY - rect.top) / rect.height) * 520;
-  if (x < 55 || x > 695 || y < 25 || y > 465) return;
+    box = graphBox(),
+    x = event.clientX - rect.left,
+    y = event.clientY - rect.top;
+  if (x < box.x || x > box.x + box.w || y < box.y || y > box.y + box.h) return;
   const b = result.input.bounds;
-  $("x").value = (b[0] + ((x - 55) / 640) * (b[1] - b[0])).toFixed(6);
-  $("y").value = (b[3] - ((y - 25) / 440) * (b[3] - b[2])).toFixed(6);
+  $("x").value = (b[0] + ((x - box.x) / box.w) * (b[1] - b[0])).toFixed(6);
+  $("y").value = (b[3] - ((y - box.y) / box.h) * (b[3] - b[2])).toFixed(6);
   run();
 });
 $("landscape").addEventListener("keydown", (event) => {
-  if (!result) return;
+  if (!result || worker) return;
   if (event.key === "Enter") {
     run();
     return;
@@ -486,5 +575,17 @@ $("file").addEventListener("change", async () => {
     $("file").value = "";
   }
 });
+for (const [button, panel] of [
+  ["settings-open", "settings-panel"],
+  ["analysis-open", "analysis-panel"],
+]) {
+  $(button).onclick = () => $(panel).showModal();
+}
+for (const b of document.querySelectorAll("[data-close]"))
+  b.onclick = () => $(b.dataset.close).close();
+$("form").addEventListener("submit", () => $("settings-panel").close());
+new ResizeObserver(() => {
+  if (result) drawLandscape();
+}).observe($("landscape"));
 load(example);
 run();
