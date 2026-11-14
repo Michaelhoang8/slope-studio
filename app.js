@@ -11,7 +11,8 @@ const $ = (id) => document.getElementById(id),
 let result = null,
   worker = null,
   timer = null,
-  inspected = null;
+  inspected = null,
+  landscapeCache = null;
 const fmt = (n) =>
   n === null
     ? "Unavailable"
@@ -137,6 +138,11 @@ function render() {
   table.append(body);
   $("comparison").replaceChildren(table);
   setMethod();
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+    $("landscape").animate([{ opacity: 0.35 }, { opacity: 1 }], {
+      duration: 500,
+      easing: "ease-out",
+    });
 }
 function setMethod() {
   stop();
@@ -252,87 +258,111 @@ function drawLandscape() {
     grid = result.surface;
   const px = (x) => box.x + ((x - xmin) / (xmax - xmin)) * box.w,
     py = (y) => box.y + ((ymax - y) / (ymax - ymin)) * box.h;
-  ctx.fillStyle = "#17131e";
-  ctx.fillRect(0, 0, box.width, box.height);
-  const den = grid.min === null ? 1 : Math.log1p(grid.max - grid.min) || 1;
-  const tone = (v) =>
-    v === null ? null : Math.log1p(Math.max(0, v - grid.min)) / den;
-  const off = document.createElement("canvas");
-  off.width = off.height = grid.size;
-  const oc = off.getContext("2d"),
-    pixels = oc.createImageData(grid.size, grid.size);
-  grid.values.forEach((v, i) => {
-    const t = tone(v),
-      c = t === null ? [78, 76, 82] : [35 + 80 * t, 28 + 47 * t, 47 + 103 * t];
-    pixels.data.set([...c.map(Math.round), 255], i * 4);
-  });
-  oc.putImageData(pixels, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(off, box.x, box.y, box.w, box.h);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(box.x, box.y, box.w, box.h);
-  ctx.clip();
-  // Iso-loss lines from the sampled surface, interpolated within each grid cell.
-  ctx.strokeStyle = "#d2b7ee";
-  ctx.globalAlpha = 0.19;
-  ctx.lineWidth = 0.7;
-  for (let level = 0.08; level < 1; level += 0.075) {
+  const cached =
+    landscapeCache &&
+    landscapeCache.result === result &&
+    landscapeCache.width === canvas.width &&
+    landscapeCache.height === canvas.height;
+  if (cached) {
+    ctx.drawImage(landscapeCache.canvas, 0, 0, box.width, box.height);
+    ctx.save();
     ctx.beginPath();
-    for (let row = 0; row < grid.size - 1; row++)
-      for (let col = 0; col < grid.size - 1; col++) {
-        const ids = [
-          row * grid.size + col,
-          row * grid.size + col + 1,
-          (row + 1) * grid.size + col + 1,
-          (row + 1) * grid.size + col,
-        ];
-        const vals = ids.map((i) => tone(grid.values[i]));
-        if (vals.some((v) => v === null)) continue;
-        const corners = [
-            [col + 0.5, row + 0.5],
-            [col + 1.5, row + 0.5],
-            [col + 1.5, row + 1.5],
-            [col + 0.5, row + 1.5],
-          ],
-          hits = [];
-        for (let edge = 0; edge < 4; edge++) {
-          const next = (edge + 1) % 4,
-            a = vals[edge],
-            b = vals[next];
-          if (a < level !== b < level) {
-            const t = (level - a) / (b - a);
-            hits.push([
-              box.x +
-                ((corners[edge][0] +
-                  t * (corners[next][0] - corners[edge][0])) /
-                  grid.size) *
-                  box.w,
-              box.y +
-                ((corners[edge][1] +
-                  t * (corners[next][1] - corners[edge][1])) /
-                  grid.size) *
-                  box.h,
-            ]);
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+  } else {
+    ctx.fillStyle = "#17131e";
+    ctx.fillRect(0, 0, box.width, box.height);
+    const den = grid.min === null ? 1 : Math.log1p(grid.max - grid.min) || 1;
+    const tone = (v) =>
+      v === null ? null : Math.log1p(Math.max(0, v - grid.min)) / den;
+    const off = document.createElement("canvas");
+    off.width = off.height = grid.size;
+    const oc = off.getContext("2d"),
+      pixels = oc.createImageData(grid.size, grid.size);
+    grid.values.forEach((v, i) => {
+      const t = tone(v),
+        c =
+          t === null ? [78, 76, 82] : [35 + 80 * t, 28 + 47 * t, 47 + 103 * t];
+      pixels.data.set([...c.map(Math.round), 255], i * 4);
+    });
+    oc.putImageData(pixels, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, box.x, box.y, box.w, box.h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+    // Iso-loss lines from the sampled surface, interpolated within each grid cell.
+    ctx.strokeStyle = "#d2b7ee";
+    ctx.globalAlpha = 0.19;
+    ctx.lineWidth = 0.7;
+    for (let level = 0.08; level < 1; level += 0.075) {
+      ctx.beginPath();
+      for (let row = 0; row < grid.size - 1; row++)
+        for (let col = 0; col < grid.size - 1; col++) {
+          const ids = [
+            row * grid.size + col,
+            row * grid.size + col + 1,
+            (row + 1) * grid.size + col + 1,
+            (row + 1) * grid.size + col,
+          ];
+          const vals = ids.map((i) => tone(grid.values[i]));
+          if (vals.some((v) => v === null)) continue;
+          const corners = [
+              [col + 0.5, row + 0.5],
+              [col + 1.5, row + 0.5],
+              [col + 1.5, row + 1.5],
+              [col + 0.5, row + 1.5],
+            ],
+            hits = [];
+          for (let edge = 0; edge < 4; edge++) {
+            const next = (edge + 1) % 4,
+              a = vals[edge],
+              b = vals[next];
+            if (a < level !== b < level) {
+              const t = (level - a) / (b - a);
+              hits.push([
+                box.x +
+                  ((corners[edge][0] +
+                    t * (corners[next][0] - corners[edge][0])) /
+                    grid.size) *
+                    box.w,
+                box.y +
+                  ((corners[edge][1] +
+                    t * (corners[next][1] - corners[edge][1])) /
+                    grid.size) *
+                    box.h,
+              ]);
+            }
+          }
+          for (let j = 0; j + 1 < hits.length; j += 2) {
+            ctx.moveTo(...hits[j]);
+            ctx.lineTo(...hits[j + 1]);
           }
         }
-        for (let j = 0; j + 1 < hits.length; j += 2) {
-          ctx.moveTo(...hits[j]);
-          ctx.lineTo(...hits[j + 1]);
-        }
-      }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 0.12;
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    ctx.beginPath();
-    ctx.moveTo(box.x + (i / 4) * box.w, box.y);
-    ctx.lineTo(box.x + (i / 4) * box.w, box.y + box.h);
-    ctx.moveTo(box.x, box.y + (i / 4) * box.h);
-    ctx.lineTo(box.x + box.w, box.y + (i / 4) * box.h);
-    ctx.stroke();
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(box.x + (i / 4) * box.w, box.y);
+      ctx.lineTo(box.x + (i / 4) * box.w, box.y + box.h);
+      ctx.moveTo(box.x, box.y + (i / 4) * box.h);
+      ctx.lineTo(box.x + box.w, box.y + (i / 4) * box.h);
+      ctx.stroke();
+    }
+    const background = document.createElement("canvas");
+    background.width = canvas.width;
+    background.height = canvas.height;
+    background.getContext("2d").drawImage(canvas, 0, 0);
+    landscapeCache = {
+      result,
+      width: canvas.width,
+      height: canvas.height,
+      canvas: background,
+    };
   }
   for (const r of result.runs) {
     ctx.strokeStyle = colors[r.method];
@@ -342,8 +372,32 @@ function drawLandscape() {
     r.trace.forEach((p, i) =>
       i ? ctx.lineTo(px(p.x), py(p.y)) : ctx.moveTo(px(p.x), py(p.y)),
     );
+    ctx.shadowColor = colors[r.method];
+    ctx.shadowBlur = r.method === $("method").value ? 7 : 0;
     ctx.stroke();
+    ctx.shadowBlur = 0;
   }
+  ctx.globalAlpha = 1;
+  const glow = ctx.createRadialGradient(
+    px(inspected.x),
+    py(inspected.y),
+    0,
+    px(inspected.x),
+    py(inspected.y),
+    23,
+  );
+  glow.addColorStop(0, colors[$("method").value] + "55");
+  glow.addColorStop(1, colors[$("method").value] + "00");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(px(inspected.x), py(inspected.y), 23, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = colors[$("method").value];
+  ctx.globalAlpha = 0.45;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(px(inspected.x), py(inspected.y), 11, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.globalAlpha = 1;
   ctx.fillStyle = colors[$("method").value];
   ctx.beginPath();
@@ -581,9 +635,35 @@ for (const [button, panel] of [
 ]) {
   $(button).onclick = () => $(panel).showModal();
 }
+const closingPanels = new WeakSet();
+function closePanel(panel) {
+  if (!panel.open || closingPanels.has(panel)) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    panel.close();
+    return;
+  }
+  closingPanels.add(panel);
+  const motion = panel.animate(
+    [
+      { opacity: 1, transform: "translateX(0)" },
+      { opacity: 0, transform: "translateX(30px)" },
+    ],
+    { duration: 160, easing: "ease-in", fill: "forwards" },
+  );
+  motion.finished.finally(() => {
+    panel.close();
+    motion.cancel();
+    closingPanels.delete(panel);
+  });
+}
+for (const panel of document.querySelectorAll("dialog"))
+  panel.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closePanel(panel);
+  });
 for (const b of document.querySelectorAll("[data-close]"))
-  b.onclick = () => $(b.dataset.close).close();
-$("form").addEventListener("submit", () => $("settings-panel").close());
+  b.onclick = () => closePanel($(b.dataset.close));
+$("form").addEventListener("submit", () => closePanel($("settings-panel")));
 new ResizeObserver(() => {
   if (result) drawLandscape();
 }).observe($("landscape"));

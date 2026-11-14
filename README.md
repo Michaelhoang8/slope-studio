@@ -4,6 +4,8 @@ A two-variable automatic-differentiation and optimization workbench. Compile an 
 
 ![Slope Studio workbench](docs/workbench.png)
 
+The selected optimizer trace has a soft glow and a ring around its inspected point. Sampled surface colors, contours, and grid are cached per experiment and canvas size for scrubbing; path and point overlays still reflect the selected trace. New experiments fade in, and drawers animate in both directions while preserving native modal focus behavior. These transitions respect reduced-motion preferences.
+
 ## Run
 
 Python 3.10+ serves the local page; a modern browser performs the numerical work in a Web Worker. Node 22+ is needed only for development checks. There are no installed runtime dependencies or remote services.
